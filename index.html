@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Summarizer - Hugging Face</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            max-width: 800px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 150px;
+            transition: border-color 0.3s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .submit-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .submit-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .clear-btn {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .clear-btn:hover {
+            background: #e0e0e0;
+        }
+
+        .result-section {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 2px solid #eee;
+            display: none;
+        }
+
+        .result-section.show {
+            display: block;
+        }
+
+        .result-label {
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .result-box {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .loading {
+            text-align: center;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            padding: 15px;
+            background: #fee;
+            border-left: 4px solid #f44;
+            color: #c33;
+            border-radius: 5px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .error.show {
+            display: block;
+        }
+
+        .char-count {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .info-text {
+            background: #f0f4ff;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 13px;
+            color: #555;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📝 Text Summarizer</h1>
+        <p class="subtitle">Powered by Hugging Face Transformers.js</p>
+
+        <div class="info-text">
+            <strong>Note:</strong> The model will be downloaded on first use (may take a moment). It runs entirely in your browser, so no data is sent to any server.
+        </div>
+
+        <form id="summarizerForm">
+            <div class="form-group">
+                <label for="inputText">Enter text to summarize:</label>
+                <textarea 
+                    id="inputText" 
+                    placeholder="Enter the text you want to summarize here (minimum 50 characters for better results)..."
+                    required></textarea>
+                <div class="char-count"><span id="charCount">0</span> characters</div>
+            </div>
+
+            <div class="button-group">
+                <button type="submit" class="submit-btn" id="submitBtn">Summarize</button>
+                <button type="reset" class="clear-btn">Clear</button>
+            </div>
+        </form>
+
+        <div class="error" id="errorBox"></div>
+
+        <div class="result-section" id="resultSection">
+            <div class="result-label">Summary:</div>
+            <div class="result-box" id="resultBox"></div>
+        </div>
+    </div>
+
+    <!-- Transformers.js Library -->
+    <script async src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.6.0"></script>
+
+    <script>
+        let summarizer = null;
+        let TransformersModule = null;
+
+        // Get references to DOM elements
+        const form = document.getElementById('summarizerForm');
+        const inputText = document.getElementById('inputText');
+        const submitBtn = document.getElementById('submitBtn');
+        const resultSection = document.getElementById('resultSection');
+        const resultBox = document.getElementById('resultBox');
+        const errorBox = document.getElementById('errorBox');
+        const charCount = document.getElementById('charCount');
+
+        // Show error message
+        function showError(message) {
+            errorBox.textContent = message;
+            errorBox.classList.add('show');
+        }
+
+        // Update character count
+        inputText.addEventListener('input', (e) => {
+            charCount.textContent = e.target.value.length;
+        });
+
+        // Initialize the summarizer on first use
+        async function initializeSummarizer() {
+            if (summarizer) return;
+
+            try {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner"></span>Loading model...';
+                errorBox.classList.remove('show');
+
+                // Wait for Transformers to be loaded
+                while (!self.transformers) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+
+                const { pipeline } = self.transformers;
+
+                // Using a lightweight summarization model
+                summarizer = await pipeline('summarization', 'Xenova/distilbart-cnn-6-6');
+
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'Summarize';
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Failed to load model: ' + error.message);
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'Summarize';
+            }
+        }
+
+        // Handle form submission
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorBox.classList.remove('show');
+
+            const text = inputText.value.trim();
+
+            // Validation
+            if (!text) {
+                showError('Please enter some text to summarize.');
+                return;
+            }
+
+            if (text.length < 50) {
+                showError('Please enter at least 50 characters for better summarization results.');
+                return;
+            }
+
+            // Initialize summarizer if not already done
+            if (!summarizer) {
+                await initializeSummarizer();
+            }
+
+            if (!summarizer) {
+                return;
+            }
+
+            try {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner"></span>Summarizing...';
+                resultSection.classList.remove('show');
+
+                // Perform summarization
+                const result = await summarizer(text, {
+                    max_length: 130,
+                    min_length: 30,
+                });
+
+                // Display result
+                const summary = result[0].summary_text;
+                resultBox.textContent = summary;
+                resultSection.classList.add('show');
+
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'Summarize';
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Error during summarization: ' + error.message);
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'Summarize';
+            }
+        });
+
+        // Initialize summarizer on page load for faster first use
+        window.addEventListener('load', initializeSummarizer);
+    </script>
+</body>
+</html>
