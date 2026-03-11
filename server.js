@@ -1,10 +1,10 @@
 // Backend Text Summarizer - No External CDN Needed
-// Requires: npm install express transformers cors
+// Requires: npm install express @xenova/transformers cors
 
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { pipeline } = require('transformers');
+const { pipeline } = require('@xenova/transformers');
 
 const app = express();
 const PORT = 3000;
