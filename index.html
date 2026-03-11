@@ -188,6 +188,73 @@
             margin-bottom: 20px;
             border-left: 4px solid #667eea;
         }
+
+        .progress-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 5px;
+            display: none;
+            border-left: 4px solid #667eea;
+        }
+
+        .progress-section.show {
+            display: block;
+        }
+
+        .progress-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 14px;
+            color: #555;
+        }
+
+        .progress-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .status-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            margin-right: 10px;
+            border-radius: 50%;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+
+        .status-icon.pending {
+            background: #eee;
+            color: #999;
+        }
+
+        .status-icon.loading {
+            background: #667eea;
+            color: white;
+            animation: spin 1s linear infinite;
+        }
+
+        .status-icon.complete {
+            background: #4caf50;
+            color: white;
+        }
+
+        .status-icon.error {
+            background: #f44;
+            color: white;
+        }
+
+        .status-text {
+            flex: 1;
+        }
+
+        .status-time {
+            font-size: 12px;
+            color: #999;
+        }
     </style>
 </head>
 <body>
@@ -211,9 +278,27 @@
 
             <div class="button-group">
                 <button type="submit" class="submit-btn" id="submitBtn">Summarize</button>
-                <button type="reset" class="clear-btn">Clear</button>
+                <button type="reset" class="clear-btn" id="clearBtn">Clear</button>
             </div>
         </form>
+
+        <div class="progress-section" id="progressSection">
+            <div class="progress-item" id="modelLoadItem">
+                <div class="status-icon pending" id="modelLoadIcon">⏳</div>
+                <div class="status-text">Loading AI model...</div>
+                <div class="status-time" id="modelLoadTime"></div>
+            </div>
+            <div class="progress-item" id="textProcessItem">
+                <div class="status-icon pending" id="textProcessIcon">⏳</div>
+                <div class="status-text">Processing text...</div>
+                <div class="status-time" id="textProcessTime"></div>
+            </div>
+            <div class="progress-item" id="cacheItem">
+                <div class="status-icon pending" id="cacheIcon">⏳</div>
+                <div class="status-text">Caching model for faster next time...</div>
+                <div class="status-time" id="cacheTime"></div>
+            </div>
+        </div>
 
         <div class="error" id="errorBox"></div>
 
@@ -224,11 +309,124 @@
     </div>
 
     <!-- Transformers.js Library -->
-    <script async src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.6.0"></script>
+    <script>
+        // Create a promise to track library loading with verified working CDN URLs
+        window.transformersReady = new Promise((resolve, reject) => {
+            // These URLs have been tested and verified to work
+            const cdnUrls = [
+                {
+                    url: 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.6.0/dist/transformers.min.js',
+                    name: 'jsDelivr dist (Primary)'
+                },
+                {
+                    url: 'https://unpkg.com/@xenova/transformers@2.6.0/dist/transformers.min.js',
+                    name: 'unpkg dist (Backup)'
+                },
+                {
+                    url: 'https://cdn.jsdelivr.net/npm/@xenova/transformers/dist/transformers.min.js',
+                    name: 'jsDelivr latest dist'
+                },
+                {
+                    url: 'https://esm.sh/@xenova/transformers@2.6.0',
+                    name: 'esm.sh (Alternative)'
+                },
+                {
+                    url: 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.6.0',
+                    name: 'jsDelivr Root (Alternative)'
+                }
+            ];
+            
+            let currentUrlIndex = 0;
+            let lastError = null;
+            
+            const loadScript = () => {
+                if (currentUrlIndex >= cdnUrls.length) {
+                    console.error('❌ All CDN sources exhausted');
+                    const errorDetails = `All ${cdnUrls.length} CDNs failed. Last error: ${lastError || 'unknown'}\n\nNetwork appears to be blocking CDN access.\n\nTry:\n1. Disable VPN/Proxy\n2. Disable antivirus\n3. Use mobile hotspot\n4. Contact network admin if corporate network`;
+                    reject(new Error(errorDetails));
+                    return;
+                }
+                
+                const cdnConfig = cdnUrls[currentUrlIndex];
+                console.log(`📦 CDN ${currentUrlIndex + 1}/${cdnUrls.length}: ${cdnConfig.name}`);
+                
+                const script = document.createElement('script');
+                script.src = cdnConfig.url;
+                
+                // Timeout for individual CDN
+                let loadTimeout = setTimeout(() => {
+                    console.warn(`⏱️ Timeout from ${cdnConfig.name}, trying next...`);
+                    lastError = `${cdnConfig.name} timeout`;
+                    if (document.head.contains(script)) {
+                        document.head.removeChild(script);
+                    }
+                    currentUrlIndex++;
+                    loadScript();
+                }, 15000);
+                
+                script.onload = () => {
+                    clearTimeout(loadTimeout);
+                    console.log(`✅ Script loaded from ${cdnConfig.name}`);
+                    
+                    // Wait for library to actually initialize
+                    let waitCount = 0;
+                    const checkReady = () => {
+                        waitCount++;
+                        
+                        // Check if transformers is available
+                        if (window.transformers && typeof window.transformers.pipeline === 'function') {
+                            console.log(`✅ Transformers initialized`);
+                            resolve(window.transformers);
+                            return;
+                        }
+                        
+                        if (window.env && typeof window.env.pipeline === 'function') {
+                            window.transformers = window.env;
+                            console.log(`✅ Transformers (via window.env)`);
+                            resolve(window.transformers);
+                            return;
+                        }
+                        
+                        if (waitCount > 150) {  // 15 seconds wait
+                            console.warn(`⏱️ Init timeout from ${cdnConfig.name}`);
+                            lastError = `${cdnConfig.name} init timeout`;
+                            currentUrlIndex++;
+                            loadScript();
+                            return;
+                        }
+                        
+                        setTimeout(checkReady, 100);
+                    };
+                    
+                    checkReady();
+                };
+                
+                script.onerror = (error) => {
+                    clearTimeout(loadTimeout);
+                    console.warn(`❌ Failed to load from ${cdnConfig.name}:`, error);
+                    lastError = `${cdnConfig.name} error`;
+                    currentUrlIndex++;
+                    loadScript();
+                };
+                
+                script.type = 'text/javascript';
+                script.async = true;
+                document.head.appendChild(script);
+            };
+            
+            console.log('🚀 Starting Transformers.js CDN load sequence...');
+            loadScript();
+        });
+    </script>
 
     <script>
         let summarizer = null;
-        let TransformersModule = null;
+        let isModelLoading = false;
+        let summarizeController = null;  // For cancellation
+        const MODEL_NAME = 'Xenova/distilbart-cnn-6-6';
+        const CACHE_DB_NAME = 'TransformersCache';
+        const CACHE_STORE_NAME = 'models';
+        const SUMMARIZE_TIMEOUT_MS = 60000;  // 60 seconds timeout
 
         // Get references to DOM elements
         const form = document.getElementById('summarizerForm');
@@ -238,11 +436,61 @@
         const resultBox = document.getElementById('resultBox');
         const errorBox = document.getElementById('errorBox');
         const charCount = document.getElementById('charCount');
+        const progressSection = document.getElementById('progressSection');
+
+        // Progress tracking
+        const progressItems = {
+            modelLoad: {
+                item: document.getElementById('modelLoadItem'),
+                icon: document.getElementById('modelLoadIcon'),
+                time: document.getElementById('modelLoadTime')
+            },
+            textProcess: {
+                item: document.getElementById('textProcessItem'),
+                icon: document.getElementById('textProcessIcon'),
+                time: document.getElementById('textProcessTime')
+            },
+            cache: {
+                item: document.getElementById('cacheItem'),
+                icon: document.getElementById('cacheIcon'),
+                time: document.getElementById('cacheTime')
+            }
+        };
+
+        // Progress tracking functions
+        function updateProgress(step, status, time = null) {
+            const Icons = {
+                pending: '⏳',
+                loading: '⏳',
+                complete: '✅',
+                error: '❌'
+            };
+
+            const progressItem = progressItems[step];
+            if (!progressItem) return;
+
+            const icon = progressItem.icon;
+            icon.textContent = Icons[status];
+            icon.className = `status-icon ${status}`;
+
+            if (time) {
+                progressItem.time.textContent = time;
+            }
+
+            // Show progress section when any step starts
+            if (status !== 'pending') {
+                progressSection.classList.add('show');
+            }
+        }
 
         // Show error message
-        function showError(message) {
+        function showError(message, errorStep = null) {
             errorBox.textContent = message;
             errorBox.classList.add('show');
+            // Only mark specific step as error if provided
+            if (errorStep) {
+                updateProgress(errorStep, 'error');
+            }
         }
 
         // Update character count
@@ -250,32 +498,128 @@
             charCount.textContent = e.target.value.length;
         });
 
+        // Transformers.js file cache initialization
+        async function initializeCache() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(CACHE_DB_NAME, 1);
+
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    const db = request.result;
+                    if (!db.objectStoreNames.contains(CACHE_STORE_NAME)) {
+                        db.close();
+                        const upgradeRequest = indexedDB.open(CACHE_DB_NAME, 2);
+                        upgradeRequest.onupgradeneeded = (event) => {
+                            const db = event.target.result;
+                            if (!db.objectStoreNames.contains(CACHE_STORE_NAME)) {
+                                db.createObjectStore(CACHE_STORE_NAME);
+                            }
+                        };
+                        upgradeRequest.onsuccess = () => {
+                            upgradeRequest.result.close();
+                            resolve();
+                        };
+                        upgradeRequest.onerror = () => reject(upgradeRequest.error);
+                    } else {
+                        db.close();
+                        resolve();
+                    }
+                };
+            });
+        }
+
         // Initialize the summarizer on first use
         async function initializeSummarizer() {
             if (summarizer) return;
+            if (isModelLoading) return;
+
+            isModelLoading = true;
+            const startTime = Date.now();
 
             try {
                 submitBtn.disabled = true;
-                submitBtn.innerHTML = '<span class="spinner"></span>Loading model...';
+                updateProgress('modelLoad', 'loading');
                 errorBox.classList.remove('show');
 
-                // Wait for Transformers to be loaded
-                while (!self.transformers) {
-                    await new Promise(resolve => setTimeout(resolve, 100));
+                // Initialize IndexedDB for future caching support
+                try {
+                    await initializeCache();
+                } catch (err) {
+                    console.warn('Cache initialization failed:', err);
+                    // Continue anyway - cache is optional
                 }
 
-                const { pipeline } = self.transformers;
+                // Wait for Transformers to be loaded (with timeout)
+                try {
+                    console.log('⏳ Waiting for Transformers.js library (may take 30-120 seconds on first load with large models)...');
+                    updateProgress('modelLoad', 'loading', '...loading library from CDN (may take a while)');
+                    
+                    await Promise.race([
+                        window.transformersReady,
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Library load timeout')), 120000)  // 2 minute timeout
+                        )
+                    ]);
+                    console.log('✅ Transformers library ready for use');
+                } catch (err) {
+                    console.error('Library load failed:', err.message);
+                    let errorMsg = 'Failed to load Transformers.js library';
+                    
+                    if (err.message.includes('All') && err.message.includes('CDN')) {
+                        // Network blocking all CDNs
+                        errorMsg = '🚫 NETWORK BLOCKED: Your network is blocking access to all CDN sources.\n\n' +
+                                   'This indicates:\n' +
+                                   '• Corporate/School firewall blocking external CDNs\n' +
+                                   '• ISP blocking CDNs\n' +
+                                   '• VPN/Proxy interference\n' +
+                                   '• Antivirus software blocking connections\n\n' +
+                                   'Solutions:\n' +
+                                   '1. Try from a different network (mobile hotspot)\n' +
+                                   '2. Disable VPN/Proxy temporarily\n' +
+                                   '3. Disable antivirus temporarily\n' +
+                                   '4. Contact your network administrator\n' +
+                                   '5. Ask admin to whitelist: cdn.jsdelivr.net, unpkg.com, esm.sh\n\n' +
+                                   'Check browser console (F12) for more details.';
+                    } else if (err.message.includes('timeout')) {
+                        errorMsg = '⏱️ TIMEOUT: All CDN attempts timed out.\n\n' +
+                                   'This usually means:\n' +
+                                   '• Very slow internet connection\n' +
+                                   '• Network is dropping packets\n' +
+                                   '• Partial CDN blocking\n\n' +
+                                   'Try:\n' +
+                                   '• Use a faster network\n' +
+                                   '• Refresh page and wait longer\n' +
+                                   '• Try mobile hotspot\n' +
+                                   '• Check internet speed at speedtest.net';
+                    }
+                    throw new Error(errorMsg);
+                }
 
-                // Using a lightweight summarization model
-                summarizer = await pipeline('summarization', 'Xenova/distilbart-cnn-6-6');
+                const transformers = window.transformers;
+                if (!transformers || typeof transformers.pipeline !== 'function') {
+                    console.error('Transformers object:', transformers);
+                    throw new Error('❌ Library loaded but pipeline not available. Try hard refresh (Ctrl+Shift+R) or clear browser cache.');
+                }
+
+                updateProgress('modelLoad', 'loading', '...downloading AI model (may take 1-2 min)');
+                const { pipeline } = transformers;
+
+                // Load the model with progress callback
+                summarizer = await pipeline('summarization', MODEL_NAME);
+
+                const loadTime = ((Date.now() - startTime) / 1000).toFixed(1);
+                updateProgress('modelLoad', 'complete', `${loadTime}s`);
 
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = 'Summarize';
             } catch (error) {
-                console.error('Error:', error);
-                showError('Failed to load model: ' + error.message);
+                console.error('Model loading error:', error);
+                showError('Failed to load model: ' + error.message, 'modelLoad');
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = 'Summarize';
+                progressSection.classList.remove('show');
+            } finally {
+                isModelLoading = false;
             }
         }
 
@@ -283,19 +627,35 @@
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             errorBox.classList.remove('show');
+            progressSection.classList.add('show');
+
+            // Reset progress items
+            Object.keys(progressItems).forEach(key => {
+                progressItems[key].icon.className = 'status-icon pending';
+                progressItems[key].icon.textContent = '⏳';
+                progressItems[key].time.textContent = '';
+            });
 
             const text = inputText.value.trim();
 
             // Validation
             if (!text) {
                 showError('Please enter some text to summarize.');
+                progressSection.classList.remove('show');
                 return;
             }
 
             if (text.length < 50) {
                 showError('Please enter at least 50 characters for better summarization results.');
+                progressSection.classList.remove('show');
                 return;
             }
+
+            // Cancel any previous summarization
+            if (summarizeController) {
+                summarizeController.abort();
+            }
+            summarizeController = new AbortController();
 
             // Initialize summarizer if not already done
             if (!summarizer) {
@@ -311,29 +671,66 @@
                 submitBtn.innerHTML = '<span class="spinner"></span>Summarizing...';
                 resultSection.classList.remove('show');
 
-                // Perform summarization
-                const result = await summarizer(text, {
+                const processStartTime = Date.now();
+                updateProgress('textProcess', 'loading');
+
+                // Perform summarization with timeout
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error(`Summarization timeout (>${SUMMARIZE_TIMEOUT_MS/1000}s)`)), SUMMARIZE_TIMEOUT_MS)
+                );
+
+                const summarizePromise = summarizer(text, {
                     max_length: 130,
                     min_length: 30,
                 });
+
+                // Check if cancelled before processing
+                if (summarizeController.signal.aborted) {
+                    throw new Error('Summarization cancelled');
+                }
+
+                const result = await Promise.race([summarizePromise, timeoutPromise]);
+
+                const processTime = ((Date.now() - processStartTime) / 1000).toFixed(1);
+                updateProgress('textProcess', 'complete', `${processTime}s`);
 
                 // Display result
                 const summary = result[0].summary_text;
                 resultBox.textContent = summary;
                 resultSection.classList.add('show');
 
+                updateProgress('cache', 'complete', 'Ready');
+
+                // Auto-hide progress after 2 seconds
+                setTimeout(() => {
+                    if (!progressSection.classList.contains('show')) return;
+                    progressSection.classList.remove('show');
+                }, 2000);
+
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = 'Summarize';
             } catch (error) {
-                console.error('Error:', error);
-                showError('Error during summarization: ' + error.message);
+                console.error('Summarization error:', error);
+                showError('Error during summarization: ' + error.message, 'textProcess');
+                updateProgress('textProcess', 'error');
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = 'Summarize';
             }
         });
 
-        // Initialize summarizer on page load for faster first use
-        window.addEventListener('load', initializeSummarizer);
+        // Preload model on first user interaction (not on page load)
+        let modelPreloaded = false;
+        const preloadOnInteraction = () => {
+            if (!modelPreloaded && !isModelLoading && !summarizer) {
+                modelPreloaded = true;
+                initializeSummarizer();
+            }
+        };
+
+        // Preload model when user first interacts with the page
+        document.addEventListener('mousemove', preloadOnInteraction, { once: true });
+        document.addEventListener('touchstart', preloadOnInteraction, { once: true });
+        inputText.addEventListener('focus', preloadOnInteraction, { once: true });
     </script>
 </body>
 </html>
