@@ -255,12 +255,45 @@
             font-size: 12px;
             color: #999;
         }
+
+        .mode-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            justify-content: center;
+        }
+
+        .mode-btn {
+            padding: 10px 20px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            color: #666;
+        }
+
+        .mode-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+        }
+
+        .mode-btn:hover {
+            border-color: #667eea;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>📝 Text Summarizer</h1>
         <p class="subtitle">Powered by Hugging Face Transformers.js</p>
+
+        <div class="mode-selector">
+            <button class="mode-btn active" onclick="switchMode('text')">📝 Direct Text</button>
+            <button class="mode-btn" onclick="switchMode('url')">🌐 From URL</button>
+        </div>
 
         <div class="info-text">
             <strong>Note:</strong> The model will be downloaded on first use (may take a moment). It runs entirely in your browser, so no data is sent to any server.
@@ -420,6 +453,17 @@
     </script>
 
     <script>
+        // Switch between text and URL modes
+        function switchMode(mode) {
+            if (mode === 'text') {
+                // Already on text page
+                document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+                document.querySelectorAll('.mode-btn')[0].classList.add('active');
+            } else if (mode === 'url') {
+                window.location.href = 'index-url.html';
+            }
+        }
+
         let summarizer = null;
         let isModelLoading = false;
         let summarizeController = null;  // For cancellation
