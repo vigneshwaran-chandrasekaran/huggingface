@@ -416,7 +416,10 @@
     <script>
         // Configuration
         const FRONTEND_CONFIG = {
-          REQUEST_TIMEOUT_MS: 120000  // 2 minute timeout
+          REQUEST_TIMEOUT_MS: 120000,  // 2 minute timeout
+          BACKEND_URL: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? `http://${window.location.hostname}:3000`  // Local development
+            : `${window.location.protocol}//${window.location.host}`  // Production (same domain)
         };
 
         // Switch between text and URL modes
@@ -558,7 +561,7 @@
                     abortController.abort();
                 }, FRONTEND_CONFIG.REQUEST_TIMEOUT_MS);
 
-                const response = await fetch('/api/summarize-url', {
+                const response = await fetch(`${FRONTEND_CONFIG.BACKEND_URL}/api/summarize-url`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
